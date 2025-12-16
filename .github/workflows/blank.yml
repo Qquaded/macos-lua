@@ -37,7 +37,9 @@ jobs:
         run: |
           git clone https://github.com/LuaJIT/LuaJIT.git
           cd LuaJIT
-          # LuaJIT's build system creates the dylib automatically with BUILDMODE=dynamic
+          # Patch Makefile to use .dylib extension on macOS
+          sed -i.bak 's/\.so/.dylib/g' src/Makefile
+          # Build with dynamic mode
           make MACOSX_DEPLOYMENT_TARGET=11.0 BUILDMODE=dynamic
           cd ..
 
