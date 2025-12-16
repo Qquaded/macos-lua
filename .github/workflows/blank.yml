@@ -1,56 +1,195 @@
-name: Build Lua 5.4 (macOS)
+name: Build Scripting Language Libraries
 
 on:
   push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build-macos:
     runs-on: macos-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Lua 5.4.7
+      - name: Install dependencies
+        run: brew install wget
+
+      - name: Build Lua
         run: |
-          curl -O https://www.lua.org/ftp/lua-5.4.7.tar.gz
-          tar xzf lua-5.4.7.tar.gz
+          wget https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          tar -xzf lua-5.4.7.tar.gz
+          cd lua-5.4.7
+          make macosx
+          gcc -dynamiclib -o liblua.dylib src/*.o -lm
+          cd ..
 
-            - name: Build liblua54.dylib (universal)
+      - name: Build LuaJIT
         run: |
-          cd lua-5.4.7/src
+          git clone https://github.com/LuaJIT/LuaJIT.git
+          cd LuaJIT
+          make BUILDMODE=dynamic
+          cd ..
 
-          SRC="lapi.c lcode.c lctype.c ldebug.c ldo.c ldump.c \
-               lfunc.c lgc.c llex.c lmem.c lobject.c lopcodes.c \
-               lparser.c lstate.c lstring.c ltable.c ltm.c lundump.c \
-               lvm.c lzio.c lauxlib.c lbaselib.c lcorolib.c ldblib.c \
-               liolib.c lmathlib.c loslib.c lstrlib.c ltablib.c \
-               lutf8lib.c loadlib.c linit.c"
-
-          # arm64
-          clang -arch arm64 -fPIC -dynamiclib \
-            $SRC -o liblua54_arm64.dylib \
-            -Wl,-install_name,@rpath/liblua54.dylib
-
-          # x86_64
-          clang -arch x86_64 -fPIC -dynamiclib \
-            $SRC -o liblua54_x86_64.dylib \
-            -Wl,-install_name,@rpath/liblua54.dylib
-
-          # merge
-          lipo -create \
-            liblua54_arm64.dylib \
-            liblua54_x86_64.dylib \
-            -output liblua54.dylib
-
-      - name: Codesign (ad-hoc)
+      - name: Build Duktape
         run: |
-          cd lua-5.4.7/src
-          codesign --force --sign - liblua54.dylib
+          wget https://duktape.org/duktape-2.7.0.tar.xz
+          tar -xf duktape-2.7.0.tar.xz
+          cd duktape-2.7.0
+          gcc -std=c99 -O2 -dynamiclib -o libduktape.dylib \
+            -Isrc src/duktape.c -lm
+          cd ..
 
-      - name: Upload artifact
+      - name: Build QuickJS
+        run: |
+          git clone https://github.com/bellard/quickjs.git
+          cd quickjs
+          make libquickjs.a
+          gcc -dynamiclib -o libquickjs.dylib \
+            -Wl,-all_load libquickjs.a -lm -lpthread
+          cd ..
+
+      - name: Build Python (as dylib)
+        run: |
+          wget https://www.python.org/ftp/python/3.12.7/Python-3.12.7.tgz
+          tar -xzf Python-3.12.7.tgz
+          cd Python-3.12.7
+          ./configure --enable-shared --enable-optimizations
+          make -j$(sysctl -n hw.ncpu)
+          cd ..
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/macos
+          cp lua-5.4.7/liblua.dylib artifacts/macos/ || true
+          cp LuaJIT/src/libluajit.dylib artifacts/macos/ || true
+          cp duktape-2.7.0/libduktape.dylib artifacts/macos/ || true
+          cp quickjs/libquickjs.dylib artifacts/macos/ || true
+          cp Python-3.12.7/libpython3.12.dylib artifacts/macos/ || true
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: liblua54-macos
-          path: lua-5.4.7/src/liblua54.dylib
+          name: macos-dylibs
+          path: artifacts/macos/
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+
+      - name: Build Lua
+        run: |
+          wget https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          tar -xzf lua-5.4.7.tar.gz
+          cd lua-5.4.7
+          make linux
+          gcc -shared -o liblua.so src/*.o -lm
+          cd ..
+
+      - name: Build LuaJIT
+        run: |
+          git clone https://github.com/LuaJIT/LuaJIT.git
+          cd LuaJIT
+          make BUILDMODE=dynamic
+          cd ..
+
+      - name: Build Duktape
+        run: |
+          wget https://duktape.org/duktape-2.7.0.tar.xz
+          tar -xf duktape-2.7.0.tar.xz
+          cd duktape-2.7.0
+          gcc -std=c99 -O2 -shared -fPIC -o libduktape.so \
+            -Isrc src/duktape.c -lm
+          cd ..
+
+      - name: Build QuickJS
+        run: |
+          git clone https://github.com/bellard/quickjs.git
+          cd quickjs
+          make libquickjs.a
+          gcc -shared -o libquickjs.so \
+            -Wl,--whole-archive libquickjs.a -Wl,--no-whole-archive \
+            -lm -lpthread
+          cd ..
+
+      - name: Build Python (as shared library)
+        run: |
+          wget https://www.python.org/ftp/python/3.12.7/Python-3.12.7.tgz
+          tar -xzf Python-3.12.7.tgz
+          cd Python-3.12.7
+          ./configure --enable-shared --enable-optimizations
+          make -j$(nproc)
+          cd ..
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux
+          cp lua-5.4.7/liblua.so artifacts/linux/ || true
+          cp LuaJIT/src/libluajit.so artifacts/linux/ || true
+          cp duktape-2.7.0/libduktape.so artifacts/linux/ || true
+          cp quickjs/libquickjs.so artifacts/linux/ || true
+          cp Python-3.12.7/libpython3.12.so* artifacts/linux/ || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-shared-libs
+          path: artifacts/linux/
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Lua
+        shell: bash
+        run: |
+          curl -L -o lua-5.4.7.tar.gz https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          tar -xzf lua-5.4.7.tar.gz
+          cd lua-5.4.7/src
+          cl /O2 /MD /LD /DLUA_BUILD_AS_DLL *.c /link /OUT:lua54.dll
+          cd ../..
+
+      - name: Build LuaJIT
+        shell: cmd
+        run: |
+          git clone https://github.com/LuaJIT/LuaJIT.git
+          cd LuaJIT\src
+          msvcbuild.bat
+          cd ..\..
+
+      - name: Build Duktape
+        shell: bash
+        run: |
+          curl -L -o duktape-2.7.0.tar.xz https://duktape.org/duktape-2.7.0.tar.xz
+          tar -xf duktape-2.7.0.tar.xz
+          cd duktape-2.7.0
+          cl /O2 /MD /LD /Isrc src/duktape.c /link /OUT:duktape.dll
+          cd ..
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts/windows
+          cp lua-5.4.7/src/lua54.dll artifacts/windows/ || true
+          cp LuaJIT/src/lua51.dll artifacts/windows/ || true
+          cp duktape-2.7.0/duktape.dll artifacts/windows/ || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-dlls
+          path: artifacts/windows/
