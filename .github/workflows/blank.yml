@@ -17,18 +17,25 @@ jobs:
           curl -O https://www.lua.org/ftp/lua-5.4.7.tar.gz
           tar xzf lua-5.4.7.tar.gz
 
-      - name: Build liblua54.dylib (universal)
+            - name: Build liblua54.dylib (universal)
         run: |
           cd lua-5.4.7/src
 
+          SRC="lapi.c lcode.c lctype.c ldebug.c ldo.c ldump.c \
+               lfunc.c lgc.c llex.c lmem.c lobject.c lopcodes.c \
+               lparser.c lstate.c lstring.c ltable.c ltm.c lundump.c \
+               lvm.c lzio.c lauxlib.c lbaselib.c lcorolib.c ldblib.c \
+               liolib.c lmathlib.c loslib.c lstrlib.c ltablib.c \
+               lutf8lib.c loadlib.c linit.c"
+
           # arm64
           clang -arch arm64 -fPIC -dynamiclib \
-            *.c -o liblua54_arm64.dylib \
+            $SRC -o liblua54_arm64.dylib \
             -Wl,-install_name,@rpath/liblua54.dylib
 
           # x86_64
           clang -arch x86_64 -fPIC -dynamiclib \
-            *.c -o liblua54_x86_64.dylib \
+            $SRC -o liblua54_x86_64.dylib \
             -Wl,-install_name,@rpath/liblua54.dylib
 
           # merge
