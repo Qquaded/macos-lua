@@ -37,6 +37,7 @@ jobs:
         run: |
           git clone https://github.com/LuaJIT/LuaJIT.git
           cd LuaJIT
+          export MACOSX_DEPLOYMENT_TARGET=11.0
           make BUILDMODE=dynamic
           cd ..
 
@@ -113,6 +114,7 @@ jobs:
         run: |
           git clone https://github.com/LuaJIT/LuaJIT.git
           cd LuaJIT
+          export MACOSX_DEPLOYMENT_TARGET=11.0
           make BUILDMODE=dynamic
           cd ..
 
@@ -129,7 +131,7 @@ jobs:
         run: |
           git clone https://github.com/bellard/quickjs.git
           cd quickjs
-          make libquickjs.a
+          make CFLAGS="-fPIC -O2" libquickjs.a
           gcc -shared -o libquickjs.so \
             -Wl,--whole-archive libquickjs.a -Wl,--no-whole-archive \
             -lm -lpthread
