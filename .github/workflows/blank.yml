@@ -52,6 +52,15 @@ jobs:
             -Isrc src/duktape.c -lm
           cd ..
 
+      - name: Install dependencies
+        run: brew install wget cmake  # This should get latest CMake
+
+      - name: Upgrade CMake (if needed)
+        run: |
+          cmake --version
+          brew upgrade cmake || true
+          cmake --version
+
       - name: Build Discord RPC (Universal Binary)
         run: |
           git clone https://github.com/discord/discord-rpc.git
