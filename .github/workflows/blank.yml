@@ -21,10 +21,17 @@ jobs:
         run: |
           wget https://www.lua.org/ftp/lua-5.4.7.tar.gz
           tar -xzf lua-5.4.7.tar.gz
-          cd lua-5.4.7
-          make macosx
-          gcc -dynamiclib -o liblua.dylib src/*.o -lm
-          cd ..
+          cd lua-5.4.7/src
+          # Compile all source files except lua.c and luac.c with -fPIC
+          gcc -std=gnu99 -O2 -fPIC -DLUA_USE_MACOSX -DLUA_USE_DLOPEN -c \
+            lapi.c lcode.c lctype.c ldebug.c ldo.c ldump.c lfunc.c lgc.c \
+            llex.c lmem.c lobject.c lopcodes.c lparser.c lstate.c lstring.c \
+            ltable.c ltm.c lundump.c lvm.c lzio.c lauxlib.c lbaselib.c \
+            lcorolib.c ldblib.c liolib.c lmathlib.c loadlib.c loslib.c \
+            lstrlib.c ltablib.c lutf8lib.c linit.c
+          # Create dynamic library
+          gcc -dynamiclib -o liblua.dylib *.o -lm
+          cd ../..
 
       - name: Build LuaJIT
         run: |
@@ -63,7 +70,7 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p artifacts/macos
-          cp lua-5.4.7/liblua.dylib artifacts/macos/ || true
+          cp lua-5.4.7/src/liblua.dylib artifacts/macos/ || true
           cp LuaJIT/src/libluajit.dylib artifacts/macos/ || true
           cp duktape-2.7.0/libduktape.dylib artifacts/macos/ || true
           cp quickjs/libquickjs.dylib artifacts/macos/ || true
@@ -90,10 +97,17 @@ jobs:
         run: |
           wget https://www.lua.org/ftp/lua-5.4.7.tar.gz
           tar -xzf lua-5.4.7.tar.gz
-          cd lua-5.4.7
-          make linux
-          gcc -shared -o liblua.so src/*.o -lm
-          cd ..
+          cd lua-5.4.7/src
+          # Compile all source files except lua.c and luac.c with -fPIC
+          gcc -std=gnu99 -O2 -fPIC -DLUA_USE_LINUX -DLUA_USE_DLOPEN -c \
+            lapi.c lcode.c lctype.c ldebug.c ldo.c ldump.c lfunc.c lgc.c \
+            llex.c lmem.c lobject.c lopcodes.c lparser.c lstate.c lstring.c \
+            ltable.c ltm.c lundump.c lvm.c lzio.c lauxlib.c lbaselib.c \
+            lcorolib.c ldblib.c liolib.c lmathlib.c loadlib.c loslib.c \
+            lstrlib.c ltablib.c lutf8lib.c linit.c
+          # Create shared library
+          gcc -shared -o liblua.so *.o -lm -ldl
+          cd ../..
 
       - name: Build LuaJIT
         run: |
@@ -133,7 +147,7 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p artifacts/linux
-          cp lua-5.4.7/liblua.so artifacts/linux/ || true
+          cp lua-5.4.7/src/liblua.so artifacts/linux/ || true
           cp LuaJIT/src/libluajit.so artifacts/linux/ || true
           cp duktape-2.7.0/libduktape.so artifacts/linux/ || true
           cp quickjs/libquickjs.so artifacts/linux/ || true
@@ -151,17 +165,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSVC
+      - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build Lua
-        shell: bash
+        shell: cmd
         run: |
           curl -L -o lua-5.4.7.tar.gz https://www.lua.org/ftp/lua-5.4.7.tar.gz
           tar -xzf lua-5.4.7.tar.gz
-          cd lua-5.4.7/src
-          cl /O2 /MD /LD /DLUA_BUILD_AS_DLL *.c /link /OUT:lua54.dll
-          cd ../..
+          cd lua-5.4.7\src
+          cl /O2 /MD /LD /DLUA_BUILD_AS_DLL /Fe:lua54.dll lapi.c lcode.c lctype.c ldebug.c ldo.c ldump.c lfunc.c lgc.c llex.c lmem.c lobject.c lopcodes.c lparser.c lstate.c lstring.c ltable.c ltm.c lundump.c lvm.c lzio.c lauxlib.c lbaselib.c lcorolib.c ldblib.c liolib.c lmathlib.c loadlib.c loslib.c lstrlib.c ltablib.c lutf8lib.c linit.c
+          cd ..\..
 
       - name: Build LuaJIT
         shell: cmd
@@ -172,12 +189,20 @@ jobs:
           cd ..\..
 
       - name: Build Duktape
-        shell: bash
+        shell: cmd
         run: |
           curl -L -o duktape-2.7.0.tar.xz https://duktape.org/duktape-2.7.0.tar.xz
           tar -xf duktape-2.7.0.tar.xz
           cd duktape-2.7.0
-          cl /O2 /MD /LD /Isrc src/duktape.c /link /OUT:duktape.dll
+          cl /O2 /MD /LD /Isrc /Fe:duktape.dll src\duktape.c
+          cd ..
+
+      - name: Build QuickJS
+        shell: cmd
+        run: |
+          git clone https://github.com/bellard/quickjs.git
+          cd quickjs
+          nmake /f Makefile.msvc
           cd ..
 
       - name: Collect artifacts
@@ -187,6 +212,7 @@ jobs:
           cp lua-5.4.7/src/lua54.dll artifacts/windows/ || true
           cp LuaJIT/src/lua51.dll artifacts/windows/ || true
           cp duktape-2.7.0/duktape.dll artifacts/windows/ || true
+          cp quickjs/qjs.exe artifacts/windows/ || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
