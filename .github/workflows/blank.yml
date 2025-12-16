@@ -1,0 +1,49 @@
+name: Build Lua 5.4 (macOS)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Lua 5.4.7
+        run: |
+          curl -O https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          tar xzf lua-5.4.7.tar.gz
+
+      - name: Build liblua54.dylib (universal)
+        run: |
+          cd lua-5.4.7/src
+
+          # arm64
+          clang -arch arm64 -fPIC -dynamiclib \
+            *.c -o liblua54_arm64.dylib \
+            -Wl,-install_name,@rpath/liblua54.dylib
+
+          # x86_64
+          clang -arch x86_64 -fPIC -dynamiclib \
+            *.c -o liblua54_x86_64.dylib \
+            -Wl,-install_name,@rpath/liblua54.dylib
+
+          # merge
+          lipo -create \
+            liblua54_arm64.dylib \
+            liblua54_x86_64.dylib \
+            -output liblua54.dylib
+
+      - name: Codesign (ad-hoc)
+        run: |
+          cd lua-5.4.7/src
+          codesign --force --sign - liblua54.dylib
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: liblua54-macos
+          path: lua-5.4.7/src/liblua54.dylib
