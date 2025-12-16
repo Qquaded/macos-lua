@@ -52,6 +52,21 @@ jobs:
             -Isrc src/duktape.c -lm
           cd ..
 
+      - name: Build Discord RPC (Universal Binary)
+        run: |
+          git clone https://github.com/discord/discord-rpc.git
+          cd discord-rpc
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+                   -DCMAKE_BUILD_TYPE=Release \
+                   -DBUILD_SHARED_LIBS=ON \
+                   -DBUILD_EXAMPLES=OFF
+          make
+          echo "=== Universal binary architecture ==="
+          lipo -info src/libdiscord-rpc.dylib
+          cd ../..
+
       - name: Build QuickJS
         run: |
           git clone https://github.com/bellard/quickjs.git
@@ -79,6 +94,7 @@ jobs:
           cp duktape-2.7.0/libduktape.dylib artifacts/macos/ || true
           cp quickjs/libquickjs.dylib artifacts/macos/ || true
           cp Python-3.12.7/libpython3.12.dylib artifacts/macos/ || true
+          cp discord-rpc/build/src/libdiscord-rpc.dylib artifacts/macos/ || true
           # List what we actually found
           echo "=== Files collected in artifacts/macos ==="
           ls -la artifacts/macos/ || true
