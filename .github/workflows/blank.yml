@@ -36,10 +36,14 @@ jobs:
       - name: Build LuaJIT
         run: |
           git clone https://github.com/LuaJIT/LuaJIT.git
-          cd LuaJIT
-          export MACOSX_DEPLOYMENT_TARGET=11.0
-          make BUILDMODE=dynamic
-          cd ..
+          cd LuaJIT/src
+          # Build object files with -fPIC
+          make clean
+          make CC="clang -arch x86_64" CFLAGS="-O2 -fPIC" \
+               HOST_CC="clang -arch x86_64" BUILDMODE=dynamic
+          # Create dynamic library manually
+          gcc -dynamiclib -o libluajit.dylib *.o -lm
+          cd ../..
 
       - name: Build Duktape
         run: |
